@@ -67,22 +67,21 @@ int printMateInfo(char* file,char* out){
 }
 //抽取音频数据
 int getAudioData(AVFormatContext *ctx,char* dest){
-   //创建一个可写的输出文件	
+  //创建一个可写的输出文件,用于存放输出数据	
   FILE* dest_fd=fopen(dest,"wb");
   if(!dest_fd){
     av_log(NULL,AV_LOG_ERROR,"open out file %s fail! \n",dest); 
     return -1;
   }
 
-//找到音频流,第二参数流类型（FFMPEG宏）第三个流的索引号，未知，填-1，第四个，相关流的索引号，
-//如音频流对应的视频流索引号，也未知，第五个制定解解码器，最后一个是标志符解
+  //找到音频流,第二参数流类型（FFMPEG宏）第三个流的索引号，未知，填-1，第四个，相关流的索引号，
+  //如音频流对应的视频流索引号，也未知，第五个制定解解码器，最后一个是标志符解
   int index=av_find_best_stream(ctx,AVMEDIA_TYPE_AUDIO,-1,-1,NULL,0);
 
   if(index<0){
      av_log(NULL,AV_LOG_ERROR,"find audio stream fail!");
      return -1;
   }
-
   //读取数据包（因历史原因，函数未改名字）
   AVPacket audio_pkt;
   av_init_packet(&audio_pkt);
@@ -90,11 +89,10 @@ int getAudioData(AVFormatContext *ctx,char* dest){
       if(audio_pkt.stream_index==index){
       int len=fwrite(audio_pkt.data,1,audio_pkt.size,dest_fd);	
       if(len!=audio_pkt.size){
-	    av_log(NULL,AV_LOG_WARNING,"the write data length not equals audio_pkt size \n");
+	  av_log(NULL,AV_LOG_WARNING,"the write data length not equals audio_pkt size \n");
       }
       av_packet_unref(&audio_pkt);
       }
-  
   }
 }
 
