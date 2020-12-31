@@ -17,7 +17,7 @@
 #   define AV_RB16(x)                           \
     ((((const uint8_t*)(x))[0] << 8) |          \
       ((const uint8_t*)(x))[1])
-#endif
+#endgf
 
 static int alloc_and_copy(AVPacket *out,
                           const uint8_t *sps_pps, uint32_t sps_pps_size,
@@ -191,6 +191,7 @@ int h264_mp4toannexb(AVFormatContext *fmt_ctx, AVPacket *in, FILE *dst_fd)
         for (nal_size = 0, i = 0; i<4; i++)
             nal_size = (nal_size << 8) | buf[i];
 
+
         buf += 4; //跳过4字节（也就是视频帧长度），从而指向真正的视频帧数据 
         unit_type = *buf & 0x1f; //视频帧的第一个字节里有NAL TYPE
 
@@ -199,7 +200,8 @@ int h264_mp4toannexb(AVFormatContext *fmt_ctx, AVPacket *in, FILE *dst_fd)
             goto fail;
         /* prepend only to the first type 5 NAL unit of an IDR picture, if no sps/pps are already present */
        
-        av_log(NULL, AV_LOG_INFO, "------->nalu type=%d \n",unit_type);
+	av_log(NULL, AV_LOG_INFO, "------->nal type=%d,size=%d \n",unit_type,nal_size);
+
         if (unit_type == 5) {
             //在每个I帧之前都加 SPS/PPS
             h264_extradata_to_annexb( fmt_ctx->streams[in->stream_index]->codecpar->extradata,
@@ -236,6 +238,40 @@ fail:
 }
 
 
+
+
+int OpenRtspStream(const char* url,AVFormatContext **ic)
+{
+    AVDictionary* options = NULL;
+    int ret=-1;
+    ret=av_dict_set(&options,"rtsp_transport", "tcp", 0);  
+    if(ret<0)
+        return -1;
+    ret=av_dict_set(&options,"stimeout","10000000",0);
+    if(ret<0)
+        return -1;
+    if(avformat_open_input(ic,url,NULL,&options)!=0)          //avformat_close_input 关闭
+    {
+        if(!(*ic))
+            avformat_free_context(*ic);
+        return -1;
+    }
+    if(avformat_find_stream_info(*ic,NULL)<0)
+    {
+        if(!(*ic))
+        {
+            avformat_close_input(ic);
+            avformat_free_context(*ic);
+        }
+        return -1;    
+    }
+    
+    printf("-----------rtsp流输入信息--------------\n");
+    av_dump_format(*ic, 0, url,0);
+    printf("---------------------------------------\n");
+    printf("\n");
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -284,7 +320,19 @@ int main(int argc, char *argv[])
     }
 
     /*open input media file, and allocate format context*/
+    /*
     if((err_code = avformat_open_input(&fmt_ctx, src_filename, NULL, NULL)) < 0){
+        av_strerror(err_code, errors, 1024);
+        av_log(NULL, AV_LOG_DEBUG, "Could not open source file: %s, %d(%s)\n",
+               src_filename,
+               err_code,
+               errors);
+        return -1;
+    }
+*/
+
+
+    if((err_code = OpenRtspStream(src_filename,&fmt_ctx)) < 0){
         av_strerror(err_code, errors, 1024);
         av_log(NULL, AV_LOG_DEBUG, "Could not open source file: %s, %d(%s)\n",
                src_filename,
@@ -294,12 +342,8 @@ int main(int argc, char *argv[])
     }
 
     /*dump input information*/
-    av_dump_format(fmt_ctx, 0, src_filename, 0);
+    //av_dump_format(fmt_ctx, 0, src_filename, 0);
 
-    /*initialize packet*/
-    av_init_packet(&pkt);
-    pkt.data = NULL;
-    pkt.size = 0;
 
     /*find best video stream*/
     video_stream_index = av_find_best_stream(fmt_ctx, AVMEDIA_TYPE_VIDEO, -1, -1, NULL, 0);
@@ -310,8 +354,13 @@ int main(int argc, char *argv[])
         return AVERROR(EINVAL);
     }
 
+    /*initialize packet*/
+    av_init_packet(&pkt);
+    pkt.data = NULL;
+    pkt.size = 0;
+
     /*read frames from media file*/
-    while(av_read_frame(fmt_ctx, &pkt) >=0&&count<200){
+    while(av_read_frame(fmt_ctx, &pkt) >=0&&count<400){
         if(pkt.stream_index == video_stream_index){
             h264_mp4toannexb(fmt_ctx, &pkt, dst_fd);
         }
